@@ -1,0 +1,71 @@
+/*-- scss:defaults --*/
+
+/* Cambiar color de navbar */
+$navbar-bg: #2F2E4E;
+
+/* Cambiar color primario */
+$valuebox-bg-primary: #2F2E4E;
+$valuebox-bg-warning: #FCB714;
+$valuebox-bg-light: lightgrey;
+
+
+
+/* Botones descarga tablas*/
+.dt-button {
+    /* botón circular */
+    border: none !important;
+    border-radius: 50% !important;
+    padding: 0% !important;
+
+    /* color de fondo */
+    background-color: #FCB714 !important;
+
+    /* tamaño del botón */
+    width: 40px;
+    height: 40px;
+
+    /* alinear */
+    align-items: center;
+    align-content: center;
+    justify-content: center;
+    float: right;
+}
+
+/* Ícono SVG dentro del botón */
+.dt-button svg {
+    width: 20px !important;
+    height: 20px !important;
+}
+
+/* Botones descarga gráficos*/
+.btn-download {
+    /* posición */
+    // position: absolute;
+    top: 10px;
+    right: 20px;
+    z-index: 9999;
+
+    // /* botón circular */
+    // border: none !important;
+    // border-radius: 50% !important;
+    // padding: 0 !important;
+
+    /* tamaño */
+    width: 30px;
+    height: 30px;
+
+    /* centrar ícono */
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    align-content: center;
+
+    /* color de fondo */
+    // background-color: #FCB714 !important;
+}
+
+/* Ícono SVG dentro del botón */
+.btn-download svg {
+    width: 20px !important;
+    height: 20px !important;
+}

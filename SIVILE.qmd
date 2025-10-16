@@ -1,0 +1,507 @@
+---
+title: "Reporte Epidemiológico SIVILE 2024"
+author: Instituto Nacional de Epidemiología
+format: 
+    dashboard:
+        logo: logo.svg
+        orientation: columns
+        vertical_layout: fill
+        theme: custom.scss
+server: shiny
+---
+
+```{r}
+#| id: Cargar paquetes
+#| context: setup
+pacman::p_load(
+  # Quarto
+  quarto,
+  # Interactividad
+  shiny,
+  shinyWidgets,
+  # Mapas
+  sf,
+  leaflet,
+  geoAr,
+  # Gráficos
+  cols4all,
+  apyramid,
+  patchwork,
+  cowplot,
+  labelled,
+  # Tablas
+  DT,
+  bsicons,
+  # Manejo de datos
+  rio,
+  janitor,
+  scales,
+  tidyverse
+)
+
+### La app se renderiza con:
+# quarto_publish_app(server = "shinyapps.io", account = "datos-ine")
+```
+
+```{r}
+#| id: Cargar datos
+#| context: setup
+##  Cargar resumen ----
+res <- import("clean/resumen.csv")
+
+
+## Cargar shapefile provincias ----
+shp_arg <- get_geo("ARGENTINA", level = "provincia") |>
+  # Añadir códigos provincias
+  add_geo_codes() |>
+
+  # Cambiar nombre CABA
+  mutate(name_iso = if_else(codprov == "01", "CABA", name_iso)) |>
+
+  # Convertir a puntos
+  st_point_on_surface()
+
+
+## Cargar datos SIVILE ----
+datos <- import("clean/clean_SIVILE_2024.csv") |>
+  # Convertir variables caracter a factor
+  mutate(across(.cols = where(is.character), .fns = ~ factor(.x))) |>
+
+  # Asignar etiquetas de variables
+  set_variable_labels(
+    .labels = list(
+      id_prov_ucl = "UCL",
+      sexo = "Sexo",
+      grupo_edad = "Grupo etario",
+      sit_laboral = "Situación laboral",
+      nivel_instruccion = "Nivel de instrucción",
+      prov_resid = "Provincia de residencia",
+      prov_lesion = "Provincia de lesión",
+      lugar_lesion_cat = "Lugar de la lesión",
+      evento_multiple = "Evento múltiple",
+      mecanismo = "Mecanismo",
+      cond_lesionado = "Condición del lesionado",
+      modo_transporte = "Modo de transporte",
+      contraparte = "Contraparte",
+      cinturon_seguridad = "Cinturón de seguridad",
+      casco_transporte = "Uso de casco",
+      chaleco_reflectante = "Uso de chaleco reflectante",
+      asiento_ninos = "Uso de asiento para niños",
+      intencionalidad = "Intencionalidad",
+      rel_agresor = "Relación con el agresor",
+      sexo_agresor = "Sexo del agresor",
+      contexto_agresion = "Contexto de la agresión",
+      intento_previo = "Intento previo",
+      evid_alcohol = "Evidencia de alcohol",
+      evid_drogas = "Evidencia de drogas",
+      evid_med_psiq = "Evidencia de medicación psiquiátrica",
+      tipo_lesion = "Tipo de lesión",
+      egreso = "Egreso"
+    )
+  ) |>
+
+  # Reordenar niveles grupo etario
+  mutate(grupo_edad = fct_relevel(grupo_edad, "2-4", "5-9", after = 1)) |>
+
+  # Reordenar niveles educación
+  mutate(
+    nivel_instruccion = fct_relevel(
+      nivel_instruccion,
+      "Desconocido",
+      after = Inf
+    )
+  ) |>
+
+  # Reordenar niveles SPG
+  mutate(spg = fct_relevel(spg, "Grave", after = Inf)) |>
+
+  # Si la variable tiene valor "Otro/desconocido", ponerlo al final
+  mutate(across(
+    .cols = where(is.factor),
+    .fns = ~ if ("Otro/desconocido" %in% levels(.x)) {
+      fct_relevel(.x, "Otro/desconocido", after = Inf)
+    } else {
+      .x
+    }
+  ))
+```
+
+# UCL
+## Valuebox {width="25%"}
+
+```{r}
+#| content: valuebox
+#| title: UCL SIVILE activas
+#| icon: hospital
+#| color: primary
+list(value = res$n_ucl)
+```
+
+```{r}
+#| content: valuebox
+#| title: Registros totales
+#| icon: file-text
+list(value = res$n)
+```
+
+```{r}
+#| content: valuebox
+#| title: Registros válidos (*)
+#| icon: file-text
+#| color: warning
+list(value = nrow(datos))
+```
+
+<div style="font-size:0.5rem;">
+(*) Datos completos para las variables obligatorias: código establecimiento, sexo, edad, fecha de lesión, mecanismo, intencionalidad y egreso.
+</div>
+
+## Mapa {width="75%"}
+
+```{r}
+#| id: Mapa 1 - UCL x provincia
+#| context: server
+## Crear shapefile con conteo de casos por UCL y provincia
+datos_mapa <- shp_arg |>
+  select(name_iso) |>
+  inner_join(
+    datos |>
+      count(prov_ucl, id_prov_ucl) |>
+      mutate(pct = n / sum(n, na.rm = TRUE)),
+    by = join_by(name_iso == prov_ucl)
+  ) |>
+  arrange(name_iso)
+
+
+## Renderizar mapa
+output$mapa1 <- renderLeaflet({
+  # Crear paleta de colores colorblind-friendly
+  pal <- colorNumeric(
+    palette = c4a(palette = input$pal1),
+    domain = c(0, max(datos_mapa$n, na.rm = TRUE))
+  )
+
+  # Crear mapa interactivo
+  m1 <- datos_mapa |>
+    # Capa base Argentina
+    leaflet(options = leafletOptions(minZoom = 3, maxZoom = 8)) |>
+    # addArgTiles() |>
+    addProviderTiles(provider = input$base1) |>
+
+    # Capa casos x UCL x provincia
+    addCircleMarkers(
+      radius = rescale(sqrt(datos_mapa$n), to = c(5, 15)),
+      fillOpacity = 0.75,
+      fillColor = pal(datos_mapa$n),
+      stroke = FALSE,
+      clusterOptions = markerClusterOptions(
+        maxClusterRadius = 10
+      ),
+      popup = ~ paste0(
+        "<b>Provincia: </b> ",
+        name_iso,
+        "<br>",
+        "<b>UCL: </b>",
+        id_prov_ucl,
+        "<br>",
+        "<b>Casos: </b>",
+        n,
+        " (",
+        percent(pct, accuracy = .1),
+        " total país)"
+      )
+    ) |>
+
+    # Añadir leyenda
+    addLegend(
+      title = "Casos por UCL",
+      pal = pal,
+      values = datos_mapa$n,
+      position = "bottomright"
+    )
+
+  # Mostrar
+  m1
+})
+
+
+## Guardar datos del mapa como CSV
+output$down_csv <- downloadHandler(
+  filename = function() {
+    paste0("datos_casos_UCL_2024", ".csv")
+  },
+  content = function(file) {
+    datos_mapa |>
+      st_drop_geometry() |>
+      export(file = file, encoding = "UTF-8")
+  }
+)
+
+
+## Guardar datos del mapa como XLSX
+output$down_excel <- downloadHandler(
+  filename = function() {
+    paste0("datos_casos_UCL_2024", ".xlsx")
+  },
+  content = function(file) {
+    datos_mapa |>
+      st_drop_geometry() |>
+      export(file = file, encoding = "UTF-8")
+  }
+)
+```
+
+```{r}
+#| id: Toolbar mapa 1
+#| content: card-toolbar
+## Selector de colores
+tags$p("Paleta de colores:")
+
+selectInput(
+  inputId = "pal1",
+  label = NULL,
+  # inline = TRUE,
+  choices = c(
+    "Managua" = "scico.managua",
+    "Icefire" = "icefire",
+    "Tokyo" = "-scico.tokyo",
+    "Viridis" = "-viridis"
+  ),
+  selected = "-viridis"
+)
+
+## Mapa base
+tags$p("Mapa base:")
+
+selectInput(
+  inputId = "base1",
+  label = NULL,
+  choices = c(
+    "Esri Gray" = "Esri.WorldGrayCanvas",
+    "CartoDB Positron" = "CartoDB.PositronNoLabels",
+    "CartoDB Voyager" = "CartoDB.VoyagerNoLabels"
+  )
+)
+
+## Descargar datos
+tags$p("Descargar datos:")
+
+# CSV
+downloadButton(
+  outputId = "down_csv",
+  label = NULL,
+  icon = icon("file-csv"),
+  class = "btn-download"
+)
+
+# Excel
+downloadButton(
+  outputId = "down_excel",
+  label = NULL,
+  icon = icon("file-excel"),
+  class = "btn-download"
+)
+```
+
+```{r}
+#| id: Mostrar mapa 1
+leafletOutput("mapa1")
+```	
+
+# Provincia
+
+```{r}
+#| id: Mapa 2 - Casos por provincia
+#| context: server
+## Renderizar mapa
+output$mapa2 <- renderLeaflet({
+  req(input$provincia, input$estrato1, input$pal2)
+
+  # Definir variables
+  prov <- input$provincia
+  estrato <- input$estrato1
+
+  # Crear paleta de colores colorblind-friendly
+  pal <- colorNumeric(
+    palette = c4a(palette = input$pal2),
+    domain = c(0, max(datos_mapa$n, na.rm = TRUE))
+  )
+
+  # Crear datos para el mapa
+  datos_mapa <- shp_arg |>
+    inner_join(
+      tabyl(datos, !!sym(prov), !!sym(estrato)) |>
+        adorn_totals(where = "col") |>
+        rename(name_iso = !!sym(prov))
+    )
+
+  # Niveles estratificación
+  cat <- names(datos_mapa |> st_drop_geometry() |> select(where(is.numeric)))
+
+  # Crear mapa base
+  m2 <- datos_mapa |>
+    # Mapa base Argentina
+    leaflet(options = leafletOptions(minZoom = 3, maxZoom = 8)) |>
+    # addArgTiles() |>
+    addProviderTiles(provider = input$base2) |>
+
+    # Control de capas
+    addLayersControl(
+      overlayGroups = cat,
+      options = layersControlOptions(collapsed = TRUE)
+    ) |>
+    hideGroup(cat[cat != "Total"])
+
+  # Círculos reactivos
+  for (x in cat) {
+    m2 <- m2 |>
+      addCircleMarkers(
+        data = datos_mapa,
+        radius = rescale(sqrt(datos_mapa[[x]]), to = c(5, 15)),
+        fillColor = pal(datos_mapa[[x]]),
+        fillOpacity = 0.75,
+        stroke = FALSE,
+        popup = ~ paste0(
+          "<b>Provincia reporte: </b> ",
+          name_iso,
+          "<br>",
+          "<b>Casos: </b>",
+          datos_mapa[[x]]
+        ),
+        group = x
+      )
+  }
+
+  # Mostrar
+  m2 |>
+    addLegend(
+      title = "Frecuencia",
+      pal = pal,
+      values = datos_mapa$Total
+    )
+})
+```
+
+```{r}
+#| id: Tabla x provincia
+#| context: server
+## Renderizar tabla
+output$tab2 <- renderDT({
+  # Formato tablas
+  source("tab_format.R")
+
+  # Dataset para la tabla
+  datos_tab <- datos |>
+    # Seleccionar columnas
+    select(
+      Provincia = prov_lesion,
+      Sexo = sexo,
+      Edad = grupo_edad,
+      Intencionalidad = intencionalidad,
+      Egreso = egreso
+    )
+
+  # Definir estratos
+  vars <- names(datos_tab)
+  v1 <- intersect(input$vars, vars)
+
+  # Generar tabla
+  if (length(v1) == 0) {
+    tab2 <- datos_tab |>
+      count(Provincia) |>
+      mutate(pct = n / sum(n, na.rm = TRUE))
+  } else {
+    tab2 <- datos_tab |>
+      count(Provincia, across(any_of(v1))) |>
+      mutate(pct = n / sum(n, na.rm = TRUE), .by = Provincia)
+  }
+
+  # Renderizar tabla
+  tab2 |>
+    tab_format()
+})
+```
+
+
+## {.width="50%"}
+
+```{r}
+#| id: Toolbar Mapa 2
+#| content: card-toolbar
+## Selector de variable provincia
+# tags$p("Mostrar datos por:")
+selectInput(
+  inputId = "provincia",
+  label = "Mostrar datos por",
+  choices = c(
+    "Prov. UCL" = "prov_ucl",
+    "Prov. lesión" = "prov_lesion"
+  )
+)
+
+
+## Selector de estratos
+# tags$p("Estratificar por:")
+selectInput(
+  inputId = "estrato1",
+  label = "Estratificar por",
+  choices = c(
+    "Sexo" = "sexo",
+    "Edad" = "grupo_edad",
+    "Intencionalidad" = "intencionalidad"
+  )
+)
+
+## Selector de colores
+# tags$p("Paleta de colores:")
+
+selectInput(
+  inputId = "pal2",
+  label = "Paleta colores",
+  choices = c(
+    "Managua" = "scico.managua",
+    "Icefire" = "icefire",
+    "Tokyo" = "-scico.tokyo",
+    "Viridis" = "-viridis"
+  ),
+  selected = "-viridis"
+)
+
+## Mapa base
+# tags$p("Mapa base:")
+
+selectInput(
+  inputId = "base2",
+  label = "Mapa base",
+  choices = c(
+    "Esri Gray" = "Esri.WorldGrayCanvas",
+    "CartoDB Positron" = "CartoDB.PositronNoLabels",
+    "CartoDB Voyager" = "CartoDB.VoyagerNoLabels"
+  )
+)
+```
+
+```{r}
+#| id: Mostrar mapa
+leafletOutput("mapa2")
+```
+
+## {.width="50%"}
+
+```{r}
+#| id: Seleccionar estratos Tabla 1
+#| content: card-toolbar
+## Selector de estratos tabla
+checkboxGroupInput(
+  inputId = "vars",
+  label = "Frecuencias por:",
+  inline = FALSE,
+  choices = c("Sexo", "Edad", "Intencionalidad", "Egreso"),
+  selected = NULL
+)
+```
+
+```{r}
+#| id: Mostrar tab2
+DTOutput("tab2")
+```

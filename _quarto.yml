@@ -1,0 +1,8 @@
+project:
+  title: "SIVILE"
+
+# Archivos específicos con Shiny
+files:
+  - SIVILE.qmd
+
+

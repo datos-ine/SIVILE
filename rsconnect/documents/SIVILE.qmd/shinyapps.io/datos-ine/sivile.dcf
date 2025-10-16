@@ -1,0 +1,13 @@
+name: sivile
+title:
+username: datos-ine
+account: datos-ine
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 15778386
+bundleId: 11044264
+url: https://datos-ine.shinyapps.io/sivile/
+version: 1
+quarto_version: 1.8.24
+quarto_engines: knitr
+serverRender: FALSE
