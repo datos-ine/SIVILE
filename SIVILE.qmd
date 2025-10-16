@@ -226,7 +226,7 @@ output$mapa1 <- renderLeaflet({
 
 
 ## Guardar datos del mapa como CSV
-output$down_csv <- downloadHandler(
+output$down_csv1 <- downloadHandler(
   filename = function() {
     paste0("datos_casos_UCL_2024", ".csv")
   },
@@ -239,7 +239,7 @@ output$down_csv <- downloadHandler(
 
 
 ## Guardar datos del mapa como XLSX
-output$down_excel <- downloadHandler(
+output$down_excel1 <- downloadHandler(
   filename = function() {
     paste0("datos_casos_UCL_2024", ".xlsx")
   },
@@ -288,7 +288,7 @@ tags$p("Descargar datos:")
 
 # CSV
 downloadButton(
-  outputId = "down_csv",
+  outputId = "down_csv1",
   label = NULL,
   icon = icon("file-csv"),
   class = "btn-download"
@@ -296,7 +296,7 @@ downloadButton(
 
 # Excel
 downloadButton(
-  outputId = "down_excel",
+  outputId = "down_excel1",
   label = NULL,
   icon = icon("file-excel"),
   class = "btn-download"
@@ -382,54 +382,11 @@ output$mapa2 <- renderLeaflet({
 })
 ```
 
-```{r}
-#| id: Tabla x provincia
-#| context: server
-## Renderizar tabla
-output$tab2 <- renderDT({
-  # Formato tablas
-  source("tab_format.R")
-
-  # Dataset para la tabla
-  datos_tab <- datos |>
-    # Seleccionar columnas
-    select(
-      Provincia = prov_lesion,
-      Sexo = sexo,
-      Edad = grupo_edad,
-      Intencionalidad = intencionalidad,
-      Egreso = egreso
-    )
-
-  # Definir estratos
-  vars <- names(datos_tab)
-  v1 <- intersect(input$vars, vars)
-
-  # Generar tabla
-  if (length(v1) == 0) {
-    tab2 <- datos_tab |>
-      count(Provincia) |>
-      mutate(pct = n / sum(n, na.rm = TRUE))
-  } else {
-    tab2 <- datos_tab |>
-      count(Provincia, across(any_of(v1))) |>
-      mutate(pct = n / sum(n, na.rm = TRUE), .by = Provincia)
-  }
-
-  # Renderizar tabla
-  tab2 |>
-    tab_format()
-})
-```
-
-
 ## {.width="50%"}
-
 ```{r}
 #| id: Toolbar Mapa 2
 #| content: card-toolbar
 ## Selector de variable provincia
-# tags$p("Mostrar datos por:")
 selectInput(
   inputId = "provincia",
   label = "Mostrar datos por",
@@ -439,9 +396,7 @@ selectInput(
   )
 )
 
-
 ## Selector de estratos
-# tags$p("Estratificar por:")
 selectInput(
   inputId = "estrato1",
   label = "Estratificar por",
@@ -453,8 +408,6 @@ selectInput(
 )
 
 ## Selector de colores
-# tags$p("Paleta de colores:")
-
 selectInput(
   inputId = "pal2",
   label = "Paleta colores",
@@ -468,8 +421,6 @@ selectInput(
 )
 
 ## Mapa base
-# tags$p("Mapa base:")
-
 selectInput(
   inputId = "base2",
   label = "Mapa base",
@@ -487,6 +438,47 @@ leafletOutput("mapa2")
 ```
 
 ## {.width="50%"}
+```{r}
+#| id: Tabla 1
+#| context: server
+
+## Reactive con la tabla (una sola vez)
+tab1_data <- reactive({
+  datos_tab <- datos |>
+    select(prov_lesion, sexo, grupo_edad, intencionalidad, egreso)
+
+  vars <- names(datos_tab)
+  v1 <- intersect(input$vars, vars)
+
+  if (length(v1) == 0) {
+    datos_tab |>
+      count(prov_lesion) |>
+      mutate(pct = n / sum(n, na.rm = TRUE))
+  } else {
+    datos_tab |>
+      count(prov_lesion, across(any_of(v1))) |>
+      mutate(pct = n / sum(n, na.rm = TRUE), .by = prov_lesion)
+  }
+})
+
+## Renderizar tabla DT
+output$tab1 <- renderDT({
+  source("tab_format.R")
+  tab1_data() |> tab_format()
+})
+
+## Descargar como CSV
+output$down_csv2 <- downloadHandler(
+  filename = function() paste0("tabla_casos_", Sys.Date(), ".csv"),
+  content = function(file) export(tab1_data(), file)
+)
+
+## Descargar como Excel
+output$down_excel2 <- downloadHandler(
+  filename = function() paste0("tabla_casos_", Sys.Date(), ".xlsx"),
+  content = function(file) export(tab1_data(), file)
+)
+```
 
 ```{r}
 #| id: Seleccionar estratos Tabla 1
@@ -495,13 +487,37 @@ leafletOutput("mapa2")
 checkboxGroupInput(
   inputId = "vars",
   label = "Frecuencias por:",
-  inline = FALSE,
-  choices = c("Sexo", "Edad", "Intencionalidad", "Egreso"),
+  inline = TRUE,
+  choices = c(
+    "Sexo" = "sexo",
+    "Edad" = "grupo_edad",
+    "Intencionalidad" = "intencionalidad",
+    "Egreso" = "egreso"
+  ),
   selected = NULL
+)
+
+## Descargar datos
+tags$p("Descargar datos:")
+
+# CSV
+downloadButton(
+  outputId = "down_csv2",
+  label = NULL,
+  icon = icon("file-csv"),
+  class = "btn-download"
+)
+
+# Excel
+downloadButton(
+  outputId = "down_excel2",
+  label = NULL,
+  icon = icon("file-excel"),
+  class = "btn-download"
 )
 ```
 
 ```{r}
-#| id: Mostrar tab2
-DTOutput("tab2")
+#| id: Mostrar tab1
+DTOutput("tab1")
 ```

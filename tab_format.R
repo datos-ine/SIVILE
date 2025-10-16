@@ -14,26 +14,26 @@ tab_format <- function(x) {
     datatable(
       rownames = FALSE,
       filter = "top",
-      extensions = "Buttons",
+      # extensions = "Buttons",
       escape = FALSE,
       options = list(
         searching = FALSE,
         info = FALSE,
         paging = FALSE,
         autoWidth = FALSE,
-        dom = 'Bftlp',
-        buttons = list(
-          list(
-            extend = "excel",
-            text = as.character(bs_icon("file-earmark-spreadsheet")),
-            title = paste0("tab_", Sys.Date())
-          ),
-          list(
-            extend = "csv",
-            text = as.character(bs_icon("filetype-csv")),
-            title = paste0("tab_", Sys.Date())
-          )
-        )
+        dom = 'Bftlp'
+        # buttons = list(
+        #   list(
+        #     extend = "excel",
+        #     text = as.character(bs_icon("file-earmark-spreadsheet")),
+        #     title = paste0("tab_", Sys.Date())
+        #   ),
+        #   list(
+        #     extend = "csv",
+        #     text = as.character(bs_icon("filetype-csv")),
+        #     title = paste0("tab_", Sys.Date())
+        #   )
+        # )
       )
     ) |>
 
