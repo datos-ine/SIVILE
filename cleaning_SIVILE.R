@@ -1,7 +1,7 @@
 ### Limpieza dataset SIVILE 2024
 ### Autor: Tamara Ricardo
 ### Fecha modificación:
-# 2025-10-15 08:17:55
+# 2025-10-17 13:18:15
 
 # Cargar paquetes --------------------------------------------------------
 pacman::p_load(
@@ -10,6 +10,7 @@ pacman::p_load(
   epikit,
   skimr,
   geoAr,
+  labelled,
   tidyverse
 )
 
@@ -75,7 +76,7 @@ tabyl(datos_raw, CL14_INTENCIONALIDAD_ID)
 
 
 # Limpiar datos ----------------------------------------------------------
-datos <- datos_raw |>
+datos_clean <- datos_raw |>
   # Estandarizar nombres de variables
   clean_names() |>
 
@@ -369,6 +370,9 @@ datos <- datos_raw |>
     )
   )) |>
 
+  # Recategorizar evento múltiple
+  mutate(evento_multiple = if_else(evento_multiple == "NO", "No", "Sí")) |>
+
   # Recategorizar intencionalidad
   mutate(
     intencionalidad = case_when(
@@ -520,8 +524,74 @@ datos <- datos_raw |>
   select(-c(caso_id, fecha_lesion, observaciones, mecanismo_otro))
 
 
+# Asignar etiquetas variables y orden niveles ----------------------------
+datos <- datos_clean |>
+  # Convertir variables caracter a factor
+  mutate(across(.cols = where(is.character), .fns = ~ factor(.x))) |>
+
+  # Reordenar niveles grupo etario
+  mutate(grupo_edad = fct_relevel(grupo_edad, "2-4", "5-9", after = 1)) |>
+
+  # Reordenar niveles educación
+  mutate(
+    nivel_instruccion = fct_relevel(
+      nivel_instruccion,
+      "Desconocido",
+      after = Inf
+    )
+  ) |>
+
+  # Reordenar niveles SPG
+  mutate(spg = fct_relevel(spg, "Grave", after = Inf)) |>
+
+  # Si la variable tiene valor "Otro/desconocido", ponerlo al final
+  mutate(across(
+    .cols = where(is.factor),
+    .fns = ~ if ("Otro/desconocido" %in% levels(.x)) {
+      fct_relevel(.x, "Otro/desconocido", after = Inf)
+    } else {
+      .x
+    }
+  )) |>
+
+  # Asignar etiquetas de variables
+  set_variable_labels(
+    .labels = list(
+      id_prov_ucl = "UCL",
+      prov_ucl = "Provincia UCL",
+      sexo = "Sexo",
+      grupo_edad = "Grupo etario",
+      sit_laboral = "Situación laboral",
+      nivel_instruccion = "Nivel de instrucción",
+      prov_resid = "Provincia residencia",
+      prov_lesion = "Provincia lesión",
+      lugar_lesion_cat = "Lugar de la lesión",
+      evento_multiple = "Evento múltiple",
+      mecanismo = "Mecanismo",
+      cond_lesionado = "Condición del lesionado",
+      modo_transporte = "Modo de transporte",
+      contraparte = "Contraparte",
+      cinturon_seguridad = "Cinturón de seguridad",
+      casco_transporte = "Uso de casco",
+      chaleco_reflectante = "Uso de chaleco reflectante",
+      asiento_ninos = "Uso de asiento para niños",
+      intencionalidad = "Intencionalidad",
+      rel_agresor = "Relación con agresor",
+      sexo_agresor = "Sexo agresor",
+      contexto_agresion = "Contexto de agresión",
+      intento_previo = "Intento previo",
+      evid_alcohol = "Evidencia de alcohol",
+      evid_drogas = "Evidencia de drogas",
+      evid_med_psiq = "Evidencia de medicación psiquiátrica",
+      tipo_lesion = "Tipo de lesión",
+      spg = "SPG",
+      egreso = "Egreso"
+    )
+  )
+
+
 # Guardar datos limpios ---------------------------------------------------
-export(datos, file = "clean/clean_SIVILE_2024.csv", na = NA)
+export(datos, file = "clean/clean_SIVILE_2024.rds", na = NA)
 
 
 ## Crear objeto con filas y UCL

@@ -6,13 +6,10 @@
 tab_format <- function(x) {
   library(DT)
   x |>
-    rename(
-      Frecuencia = n,
-      Porcentaje = pct
-    ) |>
 
     datatable(
       rownames = FALSE,
+      colnames = c(var_label(x) |> as.character()),
       filter = "top",
       # extensions = "Buttons",
       escape = FALSE,
@@ -37,5 +34,5 @@ tab_format <- function(x) {
       )
     ) |>
 
-    formatPercentage(columns = "Porcentaje", digits = 2)
+    formatPercentage(columns = "pct", digits = 2)
 }

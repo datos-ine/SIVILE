@@ -18,7 +18,6 @@ pacman::p_load(
   quarto,
   # Interactividad
   shiny,
-  shinyWidgets,
   # Mapas
   sf,
   leaflet,
@@ -43,73 +42,13 @@ pacman::p_load(
 ```
 
 ```{r}
-#| id: Cargar datos
+#| id: Cargar datos SIVILE
 #| context: setup
 ##  Cargar resumen dataset ----
 res <- import("clean/resumen.csv")
 
 ## Cargar datos SIVILE ----
-datos <- import("clean/clean_SIVILE_2024.csv") |>
-  # Convertir variables caracter a factor
-  mutate(across(.cols = where(is.character), .fns = ~ factor(.x))) |>
-
-  # Asignar etiquetas de variables
-  set_variable_labels(
-    .labels = list(
-      id_prov_ucl = "UCL",
-      sexo = "Sexo",
-      grupo_edad = "Grupo etario",
-      sit_laboral = "Situación laboral",
-      nivel_instruccion = "Nivel de instrucción",
-      prov_resid = "Provincia de residencia",
-      prov_lesion = "Provincia de lesión",
-      lugar_lesion_cat = "Lugar de la lesión",
-      evento_multiple = "Evento múltiple",
-      mecanismo = "Mecanismo",
-      cond_lesionado = "Condición del lesionado",
-      modo_transporte = "Modo de transporte",
-      contraparte = "Contraparte",
-      cinturon_seguridad = "Cinturón de seguridad",
-      casco_transporte = "Uso de casco",
-      chaleco_reflectante = "Uso de chaleco reflectante",
-      asiento_ninos = "Uso de asiento para niños",
-      intencionalidad = "Intencionalidad",
-      rel_agresor = "Relación con el agresor",
-      sexo_agresor = "Sexo del agresor",
-      contexto_agresion = "Contexto de la agresión",
-      intento_previo = "Intento previo",
-      evid_alcohol = "Evidencia de alcohol",
-      evid_drogas = "Evidencia de drogas",
-      evid_med_psiq = "Evidencia de medicación psiquiátrica",
-      tipo_lesion = "Tipo de lesión",
-      egreso = "Egreso"
-    )
-  ) |>
-
-  # Reordenar niveles grupo etario
-  mutate(grupo_edad = fct_relevel(grupo_edad, "2-4", "5-9", after = 1)) |>
-
-  # Reordenar niveles educación
-  mutate(
-    nivel_instruccion = fct_relevel(
-      nivel_instruccion,
-      "Desconocido",
-      after = Inf
-    )
-  ) |>
-
-  # Reordenar niveles SPG
-  mutate(spg = fct_relevel(spg, "Grave", after = Inf)) |>
-
-  # Si la variable tiene valor "Otro/desconocido", ponerlo al final
-  mutate(across(
-    .cols = where(is.factor),
-    .fns = ~ if ("Otro/desconocido" %in% levels(.x)) {
-      fct_relevel(.x, "Otro/desconocido", after = Inf)
-    } else {
-      .x
-    }
-  ))
+datos <- import("clean/clean_SIVILE_2024.rds")
 ```
 
 ```{r}
@@ -119,12 +58,8 @@ datos <- import("clean/clean_SIVILE_2024.csv") |>
 argenmap <- "https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png
 "
 
-argenmap_gris <- "https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/mapabase_gris@EPSG%3A3857@png/{z}/{x}/{-y}.png
-"
-
 argenmap_hyb <- "https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/mapabase_hibrido@EPSG%3A3857@png/{z}/{x}/{-y}.png
 "
-
 
 ## Cargar shapefile provincias ----
 shp_arg <- get_geo("ARGENTINA", level = "provincia") |>
@@ -171,9 +106,9 @@ list(value = nrow(datos))
 ## Mapa {width="75%"}
 
 ```{r}
-#| id: Mapa 1 - UCL x provincia
+#| id: Mapa 1
 #| context: server
-## Crear shapefile con conteo de casos por UCL y provincia
+## Crear shapefile para el mapa
 datos_mapa <- shp_arg |>
   select(name_iso) |>
   inner_join(
@@ -237,7 +172,6 @@ output$mapa1 <- renderLeaflet({
   m1
 })
 
-
 ## Guardar datos del mapa como CSV
 output$down_csv1 <- downloadHandler(
   filename = function() {
@@ -249,7 +183,6 @@ output$down_csv1 <- downloadHandler(
       export(file = file, encoding = "UTF-8")
   }
 )
-
 
 ## Guardar datos del mapa como XLSX
 output$down_excel1 <- downloadHandler(
@@ -268,8 +201,6 @@ output$down_excel1 <- downloadHandler(
 #| id: Toolbar mapa 1
 #| content: card-toolbar
 ## Selector de colores
-# tags$p("Paleta de colores:")
-
 selectInput(
   inputId = "pal1",
   label = "Paleta de colores",
@@ -283,14 +214,12 @@ selectInput(
 )
 
 ## Mapa base
-# tags$p("Mapa base:")
-
 selectInput(
   inputId = "base1",
   label = "Mapa base",
   choices = c(
     "Argenmap (híbrido)" = argenmap_hyb,
-    "Argenmap (gris)" = argenmap_gris,
+    # "Argenmap (gris)" = argenmap_gris,
     "Argenmap (color)" = argenmap
   )
 )
@@ -318,9 +247,79 @@ downloadButton(
 ```{r}
 #| id: Mostrar mapa 1
 leafletOutput("mapa1")
-```	
+```
 
 # Provincia
+## {.toolbar}
+```{r}
+#| id: Toolbar mapa 2 y tabla 1
+## Selector de variable provincia
+selectInput(
+  inputId = "provincia",
+  label = "Mostrar datos por",
+  choices = c(
+    "Prov. UCL" = "prov_ucl",
+    "Prov. lesión" = "prov_lesion"
+  )
+)
+
+## Selector de estratos
+selectInput(
+  inputId = "estrato1",
+  label = "Estratificar por",
+  # inline = TRUE,
+  choices = c(
+    "Sexo" = "sexo",
+    "Edad" = "grupo_edad",
+    "Intencionalidad" = "intencionalidad"
+  )
+)
+
+## Selector de colores
+selectInput(
+  inputId = "pal1",
+  label = "Paleta de colores",
+  choices = c(
+    "Managua" = "scico.managua",
+    "Icefire" = "icefire",
+    "Tokyo" = "-scico.tokyo",
+    "Viridis" = "-viridis"
+  ),
+  selected = "-viridis"
+)
+
+## Mapa base
+selectInput(
+  inputId = "base1",
+  label = "Mapa base",
+  choices = c(
+    "Argenmap (híbrido)" = argenmap_hyb,
+    "Argenmap (color)" = argenmap
+  )
+)
+
+## Descargar datos
+tags$p("Descargar datos:")
+
+# CSV
+downloadButton(
+  outputId = "down_csv2",
+  label = NULL,
+  icon = icon("file-csv"),
+  class = "btn-download"
+)
+
+# Excel
+downloadButton(
+  outputId = "down_excel2",
+  label = NULL,
+  icon = icon("file-excel"),
+  class = "btn-download"
+)
+```
+
+## Columna
+### Mapa
 
 ```{r}
 #| id: Mapa 2 - Casos por provincia
@@ -396,88 +395,44 @@ output$mapa2 <- renderLeaflet({
 })
 ```
 
-## {.width="50%"}
-
 ```{r}
-#| id: Toolbar Mapa 2
-#| content: card-toolbar
-## Selector de variable provincia
-selectInput(
-  inputId = "provincia",
-  label = "Mostrar datos por",
-  choices = c(
-    "Prov. UCL" = "prov_ucl",
-    "Prov. lesión" = "prov_lesion"
-  )
-)
-
-## Selector de estratos
-selectInput(
-  inputId = "estrato1",
-  label = "Estratificar por",
-  choices = c(
-    "Sexo" = "sexo",
-    "Edad" = "grupo_edad",
-    "Intencionalidad" = "intencionalidad"
-  )
-)
-
-## Selector de colores
-# tags$p("Paleta de colores:")
-
-selectInput(
-  inputId = "pal1",
-  label = "Paleta de colores",
-  choices = c(
-    "Managua" = "scico.managua",
-    "Icefire" = "icefire",
-    "Tokyo" = "-scico.tokyo",
-    "Viridis" = "-viridis"
-  ),
-  selected = "-viridis"
-)
-
-## Mapa base
-# tags$p("Mapa base:")
-
-selectInput(
-  inputId = "base1",
-  label = "Mapa base",
-  choices = c(
-    "Argenmap (híbrido)" = argenmap_hyb,
-    "Argenmap (gris)" = argenmap_gris,
-    "Argenmap (color)" = argenmap
-  )
-)
-```
-
-```{r}
-#| id: Mostrar mapa
+#| id: Mostrar mapa 2
 leafletOutput("mapa2")
 ```
 
-## {.width="50%"}
-
+### Tabla
 ```{r}
 #| id: Tabla 1
 #| context: server
-
 ## Reactive con la tabla (una sola vez)
 tab1_data <- reactive({
   datos_tab <- datos |>
-    select(prov_lesion, sexo, grupo_edad, intencionalidad, egreso)
+    select(starts_with("prov_"), sexo, grupo_edad, intencionalidad, egreso)
 
   vars <- names(datos_tab)
-  v1 <- intersect(input$vars, vars)
+  v1 <- intersect(input$estrato1, vars)
+  provincia <- input$provincia
 
   if (length(v1) == 0) {
     datos_tab |>
-      count(prov_lesion) |>
-      mutate(pct = n / sum(n, na.rm = TRUE))
+      count(!!sym(provincia)) |>
+      mutate(pct = n / sum(n, na.rm = TRUE)) |>
+      set_variable_labels(
+        .labels = list(
+          n = "Frecuencia",
+          pct = "Porcentaje"
+        )
+      )
   } else {
     datos_tab |>
-      count(prov_lesion, across(any_of(v1))) |>
-      mutate(pct = n / sum(n, na.rm = TRUE), .by = prov_lesion)
+      count(!!sym(provincia), across(any_of(v1))) |>
+      mutate(pct = n / sum(n, na.rm = TRUE), .by = provincia) |>
+      set_variable_labels(
+        .labels = list(
+          n = "Frecuencia",
+          pct = "Porcentaje"
+        )
+      )
   }
 })
 
@@ -497,43 +452,6 @@ output$down_csv2 <- downloadHandler(
 output$down_excel2 <- downloadHandler(
   filename = function() paste0("tabla_casos_", Sys.Date(), ".xlsx"),
   content = function(file) export(tab1_data(), file)
-)
-```
-
-```{r}
-#| id: Seleccionar estratos Tabla 1
-#| content: card-toolbar
-## Selector de estratos tabla
-checkboxGroupInput(
-  inputId = "vars",
-  label = "Frecuencias por:",
-  inline = TRUE,
-  choices = c(
-    "Sexo" = "sexo",
-    "Edad" = "grupo_edad",
-    "Intencionalidad" = "intencionalidad",
-    "Egreso" = "egreso"
-  ),
-  selected = NULL
-)
-
-## Descargar datos
-tags$p("Descargar datos:")
-
-# CSV
-downloadButton(
-  outputId = "down_csv2",
-  label = NULL,
-  icon = icon("file-csv"),
-  class = "btn-download"
-)
-
-# Excel
-downloadButton(
-  outputId = "down_excel2",
-  label = NULL,
-  icon = icon("file-excel"),
-  class = "btn-download"
 )
 ```
 
