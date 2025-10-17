@@ -31,7 +31,6 @@ pacman::p_load(
   labelled,
   # Tablas
   DT,
-  bsicons,
   # Manejo de datos
   rio,
   janitor,
@@ -46,21 +45,8 @@ pacman::p_load(
 ```{r}
 #| id: Cargar datos
 #| context: setup
-##  Cargar resumen ----
+##  Cargar resumen dataset ----
 res <- import("clean/resumen.csv")
-
-
-## Cargar shapefile provincias ----
-shp_arg <- get_geo("ARGENTINA", level = "provincia") |>
-  # Añadir códigos provincias
-  add_geo_codes() |>
-
-  # Cambiar nombre CABA
-  mutate(name_iso = if_else(codprov == "01", "CABA", name_iso)) |>
-
-  # Convertir a puntos
-  st_point_on_surface()
-
 
 ## Cargar datos SIVILE ----
 datos <- import("clean/clean_SIVILE_2024.csv") |>
@@ -126,6 +112,32 @@ datos <- import("clean/clean_SIVILE_2024.csv") |>
   ))
 ```
 
+```{r}
+#| id: Cargar capas GIS
+#| context: setup
+## URL mapas base ----
+argenmap <- "https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png
+"
+
+argenmap_gris <- "https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/mapabase_gris@EPSG%3A3857@png/{z}/{x}/{-y}.png
+"
+
+argenmap_hyb <- "https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/mapabase_hibrido@EPSG%3A3857@png/{z}/{x}/{-y}.png
+"
+
+
+## Cargar shapefile provincias ----
+shp_arg <- get_geo("ARGENTINA", level = "provincia") |>
+  # Añadir códigos provincias
+  add_geo_codes() |>
+
+  # Cambiar nombre CABA
+  mutate(name_iso = if_else(codprov == "01", "CABA", name_iso)) |>
+
+  # Convertir a puntos
+  st_point_on_surface()
+```
+
 # UCL
 ## Valuebox {width="25%"}
 
@@ -172,7 +184,6 @@ datos_mapa <- shp_arg |>
   ) |>
   arrange(name_iso)
 
-
 ## Renderizar mapa
 output$mapa1 <- renderLeaflet({
   # Crear paleta de colores colorblind-friendly
@@ -185,8 +196,10 @@ output$mapa1 <- renderLeaflet({
   m1 <- datos_mapa |>
     # Capa base Argentina
     leaflet(options = leafletOptions(minZoom = 3, maxZoom = 8)) |>
-    # addArgTiles() |>
-    addProviderTiles(provider = input$base1) |>
+    addTiles(
+      urlTemplate = input$base1,
+      attribution = "Instituto Geográfico Nacional (IGN)"
+    ) |>
 
     # Capa casos x UCL x provincia
     addCircleMarkers(
@@ -255,12 +268,11 @@ output$down_excel1 <- downloadHandler(
 #| id: Toolbar mapa 1
 #| content: card-toolbar
 ## Selector de colores
-tags$p("Paleta de colores:")
+# tags$p("Paleta de colores:")
 
 selectInput(
   inputId = "pal1",
-  label = NULL,
-  # inline = TRUE,
+  label = "Paleta de colores",
   choices = c(
     "Managua" = "scico.managua",
     "Icefire" = "icefire",
@@ -271,15 +283,15 @@ selectInput(
 )
 
 ## Mapa base
-tags$p("Mapa base:")
+# tags$p("Mapa base:")
 
 selectInput(
   inputId = "base1",
-  label = NULL,
+  label = "Mapa base",
   choices = c(
-    "Esri Gray" = "Esri.WorldGrayCanvas",
-    "CartoDB Positron" = "CartoDB.PositronNoLabels",
-    "CartoDB Voyager" = "CartoDB.VoyagerNoLabels"
+    "Argenmap (híbrido)" = argenmap_hyb,
+    "Argenmap (gris)" = argenmap_gris,
+    "Argenmap (color)" = argenmap
   )
 )
 
@@ -315,7 +327,7 @@ leafletOutput("mapa1")
 #| context: server
 ## Renderizar mapa
 output$mapa2 <- renderLeaflet({
-  req(input$provincia, input$estrato1, input$pal2)
+  req(input$provincia, input$estrato1, input$pal1)
 
   # Definir variables
   prov <- input$provincia
@@ -323,7 +335,7 @@ output$mapa2 <- renderLeaflet({
 
   # Crear paleta de colores colorblind-friendly
   pal <- colorNumeric(
-    palette = c4a(palette = input$pal2),
+    palette = c4a(palette = input$pal1),
     domain = c(0, max(datos_mapa$n, na.rm = TRUE))
   )
 
@@ -340,10 +352,12 @@ output$mapa2 <- renderLeaflet({
 
   # Crear mapa base
   m2 <- datos_mapa |>
-    # Mapa base Argentina
+    # Capa base Argentina
     leaflet(options = leafletOptions(minZoom = 3, maxZoom = 8)) |>
-    # addArgTiles() |>
-    addProviderTiles(provider = input$base2) |>
+    addTiles(
+      urlTemplate = input$base1,
+      attribution = "Instituto Geográfico Nacional (IGN)"
+    ) |>
 
     # Control de capas
     addLayersControl(
@@ -383,6 +397,7 @@ output$mapa2 <- renderLeaflet({
 ```
 
 ## {.width="50%"}
+
 ```{r}
 #| id: Toolbar Mapa 2
 #| content: card-toolbar
@@ -408,9 +423,11 @@ selectInput(
 )
 
 ## Selector de colores
+# tags$p("Paleta de colores:")
+
 selectInput(
-  inputId = "pal2",
-  label = "Paleta colores",
+  inputId = "pal1",
+  label = "Paleta de colores",
   choices = c(
     "Managua" = "scico.managua",
     "Icefire" = "icefire",
@@ -421,13 +438,15 @@ selectInput(
 )
 
 ## Mapa base
+# tags$p("Mapa base:")
+
 selectInput(
-  inputId = "base2",
+  inputId = "base1",
   label = "Mapa base",
   choices = c(
-    "Esri Gray" = "Esri.WorldGrayCanvas",
-    "CartoDB Positron" = "CartoDB.PositronNoLabels",
-    "CartoDB Voyager" = "CartoDB.VoyagerNoLabels"
+    "Argenmap (híbrido)" = argenmap_hyb,
+    "Argenmap (gris)" = argenmap_gris,
+    "Argenmap (color)" = argenmap
   )
 )
 ```
@@ -438,6 +457,7 @@ leafletOutput("mapa2")
 ```
 
 ## {.width="50%"}
+
 ```{r}
 #| id: Tabla 1
 #| context: server

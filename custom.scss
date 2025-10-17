@@ -6,36 +6,7 @@ $navbar-bg: #2F2E4E;
 /* Cambiar color primario */
 $valuebox-bg-primary: #2F2E4E;
 $valuebox-bg-warning: #FCB714;
-$valuebox-bg-light: lightgrey;
 
-
-
-/* Botones descarga tablas*/
-.dt-button {
-    /* botón circular */
-    border: none !important;
-    border-radius: 50% !important;
-    padding: 0% !important;
-
-    /* color de fondo */
-    background-color: #FCB714 !important;
-
-    /* tamaño del botón */
-    width: 40px;
-    height: 40px;
-
-    /* alinear */
-    align-items: center;
-    align-content: center;
-    justify-content: center;
-    float: right;
-}
-
-/* Ícono SVG dentro del botón */
-.dt-button svg {
-    width: 20px !important;
-    height: 20px !important;
-}
 
 /* Botones descarga gráficos*/
 .btn-download {
