@@ -663,5 +663,5 @@ downloadButton(
 #| id: Mostrar gráfico
 plotOutput("plot1")
 ```
-02
+
 # Transporte
