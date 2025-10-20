@@ -507,12 +507,161 @@ downloadButton(
 ```
 
 ```{r}
-#| id: Mostrar tab1
+#| id: Mostrar tabla 1
 DTOutput("tab1")
 ```
 
 # Gráficos
+```{r}
+#| id: Gráfico de pirámides
+#| context: server
+## Gráfico pirámides reactivo
+g1 <- reactive({
+  req(input$estr3, input$estr4)
+  # Definir variables
+  x <- input$estr3
+  y <- input$estr4
 
-# Intencionalidad
+  # Crear dataset para el gráfico
+  datos_plot <- datos |>
+    select(
+      sexo,
+      grupo_edad,
+      nivel_instruccion,
+      sit_laboral,
+      lugar_lesion,
+      mecanismo,
+      intencionalidad,
+      egreso,
+      tipo_lesion
+    )
 
+  # Generar gráfico
+  datos_plot |>
+    age_pyramid(
+      age_group = any_of(x),
+      split_by = any_of(y),
+      proportional = input$prop,
+      pal = c4a(input$pal1, n = nlevels(datos[[y]]))
+    ) +
+    labs(
+      x = var_label(datos[[x]]),
+      y = "frecuencia",
+      fill = var_label(datos[[y]]),
+      title = paste0(
+        "Lesiones por causas externas según ",
+        var_label(datos[[x]]),
+        " y ",
+        var_label(datos[[y]]),
+        ", SIVILE (2024)"
+      )
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = input$legend,
+      title = element_text(face = "bold")
+    )
+})
+
+
+## Renderizar gráfico
+output$plot1 <- renderPlot({
+  g1()
+})
+
+
+## Guardar gráfico como PNG
+output$download <- downloadHandler(
+  filename = function() {
+    paste0("lesiones_", input$x, "_", input$y, "_", Sys.Date(), ".png")
+  },
+  content = function(file) {
+    ggsave(
+      filename = file,
+      plot = g1(),
+      width = 8,
+      height = 6,
+      dpi = 300
+    )
+  }
+)
+```
+
+
+```{r}
+#| id: Toolbar gráfico de pirámides
+#| content: card-toolbar
+## Variable X
+selectInput(
+  inputId = "estr3",
+  label = "Categoría",
+  choices = c(
+    "Grupo etario" = "grupo_edad",
+    "Sexo" = "sexo"
+  ),
+  width = "100%"
+)
+
+# Estrato
+selectInput(
+  inputId = "estr4",
+  label = "Estrato",
+  choices = c(
+    "Sexo" = "sexo",
+    "Nivel educativo" = "nivel_instruccion",
+    "Situación laboral" = "sit_laboral",
+    "Lugar lesión" = "lugar_lesion",
+    "Mecanismo lesión" = "mecanismo",
+    "Intencionalidad" = "intencionalidad",
+    "Tipo lesión" = "tipo_lesion",
+    "Egreso" = "egreso"
+  )
+)
+
+## Selector de colores
+selectInput(
+  inputId = "pal1",
+  label = "Paleta de colores",
+  choices = c(
+    "Managua" = "scico.managua",
+    "Icefire" = "icefire",
+    "Tokyo" = "-scico.tokyo",
+    "Viridis" = "-viridis"
+  ),
+  selected = "-viridis"
+)
+
+## Mostrar como proporción
+selectInput(
+  inputId = "prop",
+  label = "Mostrar",
+  choices = c(
+    "Porcentaje" = TRUE,
+    "Observaciones" = FALSE
+  )
+)
+
+## Posición leyenda
+selectInput(
+  inputId = "legend",
+  label = "Leyenda",
+  choices = c(
+    "Abajo" = "bottom",
+    "Arriba" = "top",
+    "Ocultar" = "none"
+  )
+)
+
+## Botón descarga
+downloadButton(
+  outputId = "download_png",
+  label = "PNG"
+)
+```
+
+```{r}
+#| id: Mostrar gráfico
+plotOutput("plot1")
+```
+02
 # Transporte

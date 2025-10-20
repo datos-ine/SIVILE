@@ -156,7 +156,7 @@ datos_clean <- datos_raw |>
       sit_laboral_id == 4 ~ "Desempleado/a",
       sit_laboral_id == 5 ~ "Estudiante",
       sit_laboral_id == 6 ~ "Tareas del hogar",
-      sit_laboral_id == 6 ~ "Jubilado/a o pensionado/a",
+      sit_laboral_id == 7 ~ "Jubilado/a o pensionado/a",
       .default = "Otro/desconocido"
     ),
     .after = sit_laboral_id
@@ -240,21 +240,21 @@ datos_clean <- datos_raw |>
     .after = lugar_lesion_id
   ) |>
 
-  # Crear variable lugar lesión combinado
-  mutate(
-    lugar_lesion_cat = case_when(
-      between(lugar_publico_id, 1, 2) ~ "Calle/avenida",
-      between(lugar_publico_id, 3, 4) ~ "Autopista/ruta",
-      lugar_publico_id == 5 ~ "Vereda",
-      lugar_publico_id == 6 ~ "Parque/plaza",
-      lugar_publico_id == 11 ~ "Área de deporte",
-      lugar_vivienda_id == 1 ~ "Patio/jardín",
-      lugar_vivienda_id == 2 ~ "Cocina",
-      lugar_vivienda_id == 4 ~ "Baño",
-      .default = lugar_lesion
-    ),
-    .after = lugar_vivienda_id
-  ) |>
+  # # Crear variable lugar lesión combinado
+  # mutate(
+  #   lugar_lesion_cat = case_when(
+  #     between(lugar_publico_id, 1, 2) ~ "Calle/avenida",
+  #     between(lugar_publico_id, 3, 4) ~ "Autopista/ruta",
+  #     lugar_publico_id == 5 ~ "Vereda",
+  #     lugar_publico_id == 6 ~ "Parque/plaza",
+  #     lugar_publico_id == 11 ~ "Área de deporte",
+  #     lugar_vivienda_id == 1 ~ "Patio/jardín",
+  #     lugar_vivienda_id == 2 ~ "Cocina",
+  #     lugar_vivienda_id == 4 ~ "Baño",
+  #     .default = lugar_lesion
+  #   ),
+  #   .after = lugar_vivienda_id
+  # ) |>
 
   # Recategorizar mecanismo de lesión
   mutate(
@@ -527,22 +527,20 @@ datos_clean <- datos_raw |>
 # Asignar etiquetas variables y orden niveles ----------------------------
 datos <- datos_clean |>
   # Convertir variables caracter a factor
-  mutate(across(.cols = where(is.character), .fns = ~ factor(.x))) |>
+  mutate(across(
+    .cols = where(is.character),
+    .fns = ~ factor(.x) |> fct_infreq()
+  )) |>
 
-  # Reordenar niveles grupo etario
-  mutate(grupo_edad = fct_relevel(grupo_edad, "2-4", "5-9", after = 1)) |>
-
-  # Reordenar niveles educación
-  mutate(
-    nivel_instruccion = fct_relevel(
-      nivel_instruccion,
-      "Desconocido",
-      after = Inf
-    )
-  ) |>
-
-  # Reordenar niveles SPG
-  mutate(spg = fct_relevel(spg, "Grave", after = Inf)) |>
+  # Si la variable tiene valor "Desconocido", ponerlo al final
+  mutate(across(
+    .cols = where(is.factor),
+    .fns = ~ if ("Desconocido" %in% levels(.x)) {
+      fct_relevel(.x, "Desconocido", after = Inf)
+    } else {
+      .x
+    }
+  )) |>
 
   # Si la variable tiene valor "Otro/desconocido", ponerlo al final
   mutate(across(
@@ -565,7 +563,7 @@ datos <- datos_clean |>
       nivel_instruccion = "Nivel de instrucción",
       prov_resid = "Provincia residencia",
       prov_lesion = "Provincia lesión",
-      lugar_lesion_cat = "Lugar de la lesión",
+      lugar_lesion = "Lugar de la lesión",
       evento_multiple = "Evento múltiple",
       mecanismo = "Mecanismo",
       cond_lesionado = "Condición del lesionado",
