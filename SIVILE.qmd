@@ -3,7 +3,6 @@ title: "Reporte Epidemiológico SIVILE 2024"
 author: Instituto Nacional de Epidemiología
 format: 
     dashboard:
-        logo: logo.svg
         orientation: columns
         vertical_layout: fill
         theme: custom.scss
@@ -44,15 +43,15 @@ pacman::p_load(
 ```{r}
 #| id: Cargar datos SIVILE
 #| context: setup
-##  Cargar resumen dataset ----
+##  Cargar resumen dataset
 res <- import("clean/resumen.csv")
 
-## Cargar datos SIVILE ----
-datos <- import("clean/clean_SIVILE_2024.rds")
+## Cargar datos SIVILE
+datos <- import("clean/clean_SIVILE_2024.rds", trust = TRUE)
 ```
 
 ```{r}
-#| id: Cargar capas GIS
+#| id: Capas GIS
 #| context: setup
 ## URL mapas base ----
 argenmap <- "https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png
@@ -71,6 +70,32 @@ shp_arg <- get_geo("ARGENTINA", level = "provincia") |>
 
   # Convertir a puntos
   st_point_on_surface()
+```
+
+```{r}
+#| id: Formato tablas
+#| context: server
+tab_format <- function(x) {
+  library(DT)
+  x |>
+
+    datatable(
+      rownames = FALSE,
+      colnames = c(var_label(x) |> as.character()),
+      filter = "top",
+      # extensions = "Buttons",
+      escape = FALSE,
+      options = list(
+        searching = FALSE,
+        info = FALSE,
+        paging = FALSE,
+        autoWidth = FALSE,
+        dom = 'Bftlp'
+      )
+    ) |>
+
+    formatPercentage(columns = "pct", digits = 2)
+}
 ```
 
 # UCL
@@ -100,7 +125,7 @@ list(value = nrow(datos))
 ```
 
 <div style="font-size:0.5rem;">
-(*) Datos completos para las variables obligatorias: código establecimiento, sexo, edad, fecha de lesión, mecanismo, intencionalidad y egreso.
+(*) Datos completos para las variables de carga obligatoria: código establecimiento, sexo, edad, fecha de lesión, mecanismo, intencionalidad y egreso.
 </div>
 
 ## Mapa {width="75%"}
@@ -108,20 +133,32 @@ list(value = nrow(datos))
 ```{r}
 #| id: Mapa 1
 #| context: server
-## Crear shapefile para el mapa
-datos_mapa <- shp_arg |>
-  select(name_iso) |>
-  inner_join(
-    datos |>
-      count(prov_ucl, id_prov_ucl) |>
-      mutate(pct = n / sum(n, na.rm = TRUE)),
-    by = join_by(name_iso == prov_ucl)
-  ) |>
-  arrange(name_iso)
+## Crear capa base Argentina
+mapa_base <- function(x) {
+  x |>
+    # Capa base Argentina
+    leaflet(options = leafletOptions(minZoom = 3, maxZoom = 8)) |>
+    addTiles(
+      urlTemplate = input$base1,
+      attribution = "<a href='https://www.ign.gob.ar/' target='_blank'>Instituto Geográfico Nacional (IGN)</a>"
+    )
+}
+
 
 ## Renderizar mapa
 output$mapa1 <- renderLeaflet({
-  # Crear paleta de colores colorblind-friendly
+  # Crear shapefile para el mapa
+  datos_mapa <- shp_arg |>
+    select(name_iso) |>
+    inner_join(
+      datos |>
+        count(prov_ucl, id_prov_ucl) |>
+        mutate(pct = n / sum(n, na.rm = TRUE)),
+      by = join_by(name_iso == prov_ucl)
+    ) |>
+    arrange(name_iso)
+
+  # Crear paletas colorblind-friendly
   pal <- colorNumeric(
     palette = c4a(palette = input$pal1),
     domain = c(0, max(datos_mapa$n, na.rm = TRUE))
@@ -129,19 +166,16 @@ output$mapa1 <- renderLeaflet({
 
   # Crear mapa interactivo
   m1 <- datos_mapa |>
-    # Capa base Argentina
-    leaflet(options = leafletOptions(minZoom = 3, maxZoom = 8)) |>
-    addTiles(
-      urlTemplate = input$base1,
-      attribution = "Instituto Geográfico Nacional (IGN)"
-    ) |>
+    mapa_base() |>
 
     # Capa casos x UCL x provincia
     addCircleMarkers(
       radius = rescale(sqrt(datos_mapa$n), to = c(5, 15)),
       fillOpacity = 0.75,
       fillColor = pal(datos_mapa$n),
-      stroke = FALSE,
+      stroke = TRUE,
+      color = "grey",
+      weight = 2,
       clusterOptions = markerClusterOptions(
         maxClusterRadius = 10
       ),
@@ -156,7 +190,7 @@ output$mapa1 <- renderLeaflet({
         n,
         " (",
         percent(pct, accuracy = .1),
-        " total país)"
+        " del total país)"
       )
     ) |>
 
@@ -168,9 +202,10 @@ output$mapa1 <- renderLeaflet({
       position = "bottomright"
     )
 
-  # Mostrar
+  # Mostrar mapa
   m1
 })
+
 
 ## Guardar datos del mapa como CSV
 output$down_csv1 <- downloadHandler(
@@ -203,7 +238,7 @@ output$down_excel1 <- downloadHandler(
 ## Selector de colores
 selectInput(
   inputId = "pal1",
-  label = "Paleta de colores",
+  label = "Paleta",
   choices = c(
     "Managua" = "scico.managua",
     "Icefire" = "icefire",
@@ -216,10 +251,9 @@ selectInput(
 ## Mapa base
 selectInput(
   inputId = "base1",
-  label = "Mapa base",
+  label = "Capa base",
   choices = c(
     "Argenmap (híbrido)" = argenmap_hyb,
-    # "Argenmap (gris)" = argenmap_gris,
     "Argenmap (color)" = argenmap
   )
 )
@@ -250,12 +284,87 @@ leafletOutput("mapa1")
 ```
 
 # Provincia
-## {.toolbar}
+## Mapa {width="50%"}
 ```{r}
-#| id: Toolbar mapa 2 y tabla 1
+#| id: Mapa 2
+#| context: server
+# Crear mapa
+output$mapa2 <- renderLeaflet({
+  req(input$prov, input$estr1, input$pal1, input$base1)
+
+  # Definir variables
+  prov <- input$prov
+  estrato <- input$estr1
+
+  # Crear datos para el mapa
+  datos_mapa <- shp_arg |>
+    inner_join(
+      tabyl(datos, !!sym(prov), !!sym(estrato)) |>
+        adorn_totals(where = "col") |>
+        rename(name_iso = !!sym(prov))
+    )
+
+  # Crear paleta de colores colorblind-friendly
+  pal <- colorNumeric(
+    palette = c4a(palette = input$pal1),
+    domain = c(0, max(datos_mapa$Total, na.rm = TRUE))
+  )
+
+  # Niveles estratificación
+  cat <- names(datos_mapa |> st_drop_geometry() |> select(where(is.numeric)))
+
+  # Crear mapa base
+  m2 <- datos_mapa |>
+    # Capa base Argentina
+    mapa_base() |>
+
+    # Leyenda
+    addLegend(
+      title = "Frecuencia",
+      pal = pal,
+      values = datos_mapa$Total
+    ) |>
+
+    # Control de capas
+    addLayersControl(
+      overlayGroups = cat,
+      options = layersControlOptions(collapsed = TRUE)
+    ) |>
+    hideGroup(cat[cat != "Total"])
+
+  # Círculos reactivos
+  for (x in cat) {
+    m2 <- m2 |>
+      addCircleMarkers(
+        data = datos_mapa,
+        radius = rescale(sqrt(datos_mapa[[x]]), to = c(5, 15)),
+        fillColor = pal(datos_mapa[[x]]),
+        fillOpacity = 0.75,
+        stroke = TRUE,
+        color = "grey",
+        weight = 2,
+        popup = ~ paste0(
+          "<b>Provincia: </b> ",
+          name_iso,
+          "<br>",
+          "<b>Casos: </b>",
+          datos_mapa[[x]]
+        ),
+        group = x
+      )
+  }
+
+  # Mostrar
+  m2
+})
+```
+
+```{r}
+#| id: Toolbar mapa 2
+#| content: card-toolbar
 ## Selector de variable provincia
 selectInput(
-  inputId = "provincia",
+  inputId = "prov",
   label = "Mostrar datos por",
   choices = c(
     "Prov. UCL" = "prov_ucl",
@@ -265,9 +374,8 @@ selectInput(
 
 ## Selector de estratos
 selectInput(
-  inputId = "estrato1",
-  label = "Estratificar por",
-  # inline = TRUE,
+  inputId = "estr1",
+  label = "Frecuencias por",
   choices = c(
     "Sexo" = "sexo",
     "Edad" = "grupo_edad",
@@ -297,9 +405,89 @@ selectInput(
     "Argenmap (color)" = argenmap
   )
 )
+```
+
+```{r}
+#| id: Mostrar mapa 2
+leafletOutput("mapa2")
+```
+
+## Tabla x provincia
+```{r}
+#| id: Tabla 1
+#| context: server
+# Tabla reactiva
+tab1_data <- reactive({
+  # Dataset para la tabla
+  datos_tab <- datos |>
+    select(starts_with("prov_"), sexo, grupo_edad, intencionalidad, egreso)
+
+  # Variables
+  vars <- intersect(input$estr2, names(datos_tab))
+  provincia <- input$prov
+
+  # Si no se selecciona estrato mostrar frecuencia por provincia
+  if (length(vars) == 0) {
+    datos_tab |>
+      count(!!sym(provincia)) |>
+      mutate(pct = n / sum(n, na.rm = TRUE)) |>
+      set_variable_labels(
+        .labels = list(
+          n = "Frecuencia",
+          pct = "Porcentaje"
+        )
+      )
+  } else {
+    datos_tab |>
+      count(!!sym(provincia), across(any_of(vars))) |>
+      mutate(pct = n / sum(n, na.rm = TRUE), .by = provincia) |>
+      set_variable_labels(
+        .labels = list(
+          n = "Frecuencia",
+          pct = "Porcentaje"
+        )
+      )
+  }
+})
+
+## Renderizar tabla DT
+output$tab1 <- renderDT({
+  # source("tab_format.R")
+
+  tab1_data() |>
+    tab_format()
+})
+
+## Descargar como CSV
+output$down_csv2 <- downloadHandler(
+  filename = function() paste0("tabla_casos_", Sys.Date(), ".csv"),
+  content = function(file) export(tab1_data(), file)
+)
+
+## Descargar como Excel
+output$down_excel2 <- downloadHandler(
+  filename = function() paste0("tabla_casos_", Sys.Date(), ".xlsx"),
+  content = function(file) export(tab1_data(), file)
+)
+```
+
+```{r}
+#| id: Toolbar tabla 1
+#| content: card-toolbar
+## Selector de estratos
+selectInput(
+  inputId = "estr2",
+  label = "Estratificar por",
+  multiple = TRUE,
+  choices = c(
+    "Sexo" = "sexo",
+    "Edad" = "grupo_edad",
+    "Intencionalidad" = "intencionalidad"
+  )
+)
 
 ## Descargar datos
-tags$p("Descargar datos:")
+tags$p("Descargar tabla:")
 
 # CSV
 downloadButton(
@@ -318,144 +506,13 @@ downloadButton(
 )
 ```
 
-## Columna
-### Mapa
-
-```{r}
-#| id: Mapa 2 - Casos por provincia
-#| context: server
-## Renderizar mapa
-output$mapa2 <- renderLeaflet({
-  req(input$provincia, input$estrato1, input$pal1)
-
-  # Definir variables
-  prov <- input$provincia
-  estrato <- input$estrato1
-
-  # Crear paleta de colores colorblind-friendly
-  pal <- colorNumeric(
-    palette = c4a(palette = input$pal1),
-    domain = c(0, max(datos_mapa$n, na.rm = TRUE))
-  )
-
-  # Crear datos para el mapa
-  datos_mapa <- shp_arg |>
-    inner_join(
-      tabyl(datos, !!sym(prov), !!sym(estrato)) |>
-        adorn_totals(where = "col") |>
-        rename(name_iso = !!sym(prov))
-    )
-
-  # Niveles estratificación
-  cat <- names(datos_mapa |> st_drop_geometry() |> select(where(is.numeric)))
-
-  # Crear mapa base
-  m2 <- datos_mapa |>
-    # Capa base Argentina
-    leaflet(options = leafletOptions(minZoom = 3, maxZoom = 8)) |>
-    addTiles(
-      urlTemplate = input$base1,
-      attribution = "Instituto Geográfico Nacional (IGN)"
-    ) |>
-
-    # Control de capas
-    addLayersControl(
-      overlayGroups = cat,
-      options = layersControlOptions(collapsed = TRUE)
-    ) |>
-    hideGroup(cat[cat != "Total"])
-
-  # Círculos reactivos
-  for (x in cat) {
-    m2 <- m2 |>
-      addCircleMarkers(
-        data = datos_mapa,
-        radius = rescale(sqrt(datos_mapa[[x]]), to = c(5, 15)),
-        fillColor = pal(datos_mapa[[x]]),
-        fillOpacity = 0.75,
-        stroke = FALSE,
-        popup = ~ paste0(
-          "<b>Provincia reporte: </b> ",
-          name_iso,
-          "<br>",
-          "<b>Casos: </b>",
-          datos_mapa[[x]]
-        ),
-        group = x
-      )
-  }
-
-  # Mostrar
-  m2 |>
-    addLegend(
-      title = "Frecuencia",
-      pal = pal,
-      values = datos_mapa$Total
-    )
-})
-```
-
-```{r}
-#| id: Mostrar mapa 2
-leafletOutput("mapa2")
-```
-
-### Tabla
-```{r}
-#| id: Tabla 1
-#| context: server
-## Reactive con la tabla (una sola vez)
-tab1_data <- reactive({
-  datos_tab <- datos |>
-    select(starts_with("prov_"), sexo, grupo_edad, intencionalidad, egreso)
-
-  vars <- names(datos_tab)
-  v1 <- intersect(input$estrato1, vars)
-  provincia <- input$provincia
-
-  if (length(v1) == 0) {
-    datos_tab |>
-      count(!!sym(provincia)) |>
-      mutate(pct = n / sum(n, na.rm = TRUE)) |>
-      set_variable_labels(
-        .labels = list(
-          n = "Frecuencia",
-          pct = "Porcentaje"
-        )
-      )
-  } else {
-    datos_tab |>
-      count(!!sym(provincia), across(any_of(v1))) |>
-      mutate(pct = n / sum(n, na.rm = TRUE), .by = provincia) |>
-      set_variable_labels(
-        .labels = list(
-          n = "Frecuencia",
-          pct = "Porcentaje"
-        )
-      )
-  }
-})
-
-## Renderizar tabla DT
-output$tab1 <- renderDT({
-  source("tab_format.R")
-  tab1_data() |> tab_format()
-})
-
-## Descargar como CSV
-output$down_csv2 <- downloadHandler(
-  filename = function() paste0("tabla_casos_", Sys.Date(), ".csv"),
-  content = function(file) export(tab1_data(), file)
-)
-
-## Descargar como Excel
-output$down_excel2 <- downloadHandler(
-  filename = function() paste0("tabla_casos_", Sys.Date(), ".xlsx"),
-  content = function(file) export(tab1_data(), file)
-)
-```
-
 ```{r}
 #| id: Mostrar tab1
 DTOutput("tab1")
 ```
+
+# Gráficos
+
+# Intencionalidad
+
+# Transporte
