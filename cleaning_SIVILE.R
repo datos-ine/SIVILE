@@ -224,7 +224,7 @@ datos_clean <- datos_raw |>
 
   # Crear variables para mes y semana epidemiológica de lesión
   mutate(
-    mes_anio_lesion = format(fecha_lesion, format = "%b-%Y"),
+    mes_anio_lesion = format(fecha_lesion, format = "%m-%Y"),
     semana_epi_lesion = epiweek(fecha_lesion),
     .after = fecha_lesion
   ) |>

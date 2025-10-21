@@ -719,6 +719,9 @@ datos_tr <- datos |>
   # Filtrar datos
   filter(mecanismo == "Transporte") |>
 
+  # Cambiar a fecha
+  mutate(mes_anio_lesion = my(mes_anio_lesion)) |>
+
   # Seleccionar columnas relevantes
   select(
     mes_anio_lesion,
@@ -762,7 +765,7 @@ output$g2 <- renderPlot({
     geom_line() +
 
     # Formato eje X
-    # scale_x_date(labels = label_date_short(), date_breaks = "2 months") +
+    scale_x_date(labels = label_date_short(), date_breaks = "2 months") +
 
     # Títulos
     labs(
