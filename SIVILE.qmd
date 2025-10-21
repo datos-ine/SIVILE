@@ -21,6 +21,7 @@ pacman::p_load(
   sf,
   leaflet,
   geoAr,
+  mapview,
   # Gráficos
   cols4all,
   apyramid,
@@ -73,8 +74,9 @@ shp_arg <- get_geo("ARGENTINA", level = "provincia") |>
 ```
 
 ```{r}
-#| id: Formato tablas
+#| id: Temas personalizados
 #| context: server
+# Tema personalizado tablas
 tab_format <- function(x) {
   library(DT)
   x |>
@@ -95,6 +97,31 @@ tab_format <- function(x) {
     ) |>
 
     formatPercentage(columns = "pct", digits = 2)
+}
+
+
+# Tema personalizado para gráficos
+tema_sivile <- function() {
+  list(
+    scale_color_discrete_c4a_cat(palette = input$pal1),
+    theme_minimal(),
+    theme(
+      legend.position = input$legend,
+      title = element_text(face = "bold"),
+      axis.text.x = element_text(angle = 60)
+    )
+  )
+}
+
+## Crear capa base Argentina
+mapa_base <- function(x) {
+  x |>
+    # Capa base Argentina
+    leaflet(options = leafletOptions(minZoom = 3, maxZoom = 8)) |>
+    addTiles(
+      urlTemplate = input$base1,
+      attribution = "<a href='https://www.ign.gob.ar/' target='_blank'>Instituto Geográfico Nacional (IGN)</a>"
+    )
 }
 ```
 
@@ -133,30 +160,20 @@ list(value = nrow(datos))
 ```{r}
 #| id: Mapa 1
 #| context: server
-## Crear capa base Argentina
-mapa_base <- function(x) {
-  x |>
-    # Capa base Argentina
-    leaflet(options = leafletOptions(minZoom = 3, maxZoom = 8)) |>
-    addTiles(
-      urlTemplate = input$base1,
-      attribution = "<a href='https://www.ign.gob.ar/' target='_blank'>Instituto Geográfico Nacional (IGN)</a>"
-    )
-}
-
+# Crear shapefile para el mapa
+datos_mapa <- shp_arg |>
+  select(name_iso) |>
+  inner_join(
+    datos |>
+      count(prov_ucl, id_prov_ucl) |>
+      mutate(pct = n / sum(n, na.rm = TRUE)),
+    by = join_by(name_iso == prov_ucl)
+  ) |>
+  arrange(name_iso)
 
 ## Renderizar mapa
 output$mapa1 <- renderLeaflet({
-  # Crear shapefile para el mapa
-  datos_mapa <- shp_arg |>
-    select(name_iso) |>
-    inner_join(
-      datos |>
-        count(prov_ucl, id_prov_ucl) |>
-        mutate(pct = n / sum(n, na.rm = TRUE)),
-      by = join_by(name_iso == prov_ucl)
-    ) |>
-    arrange(name_iso)
+  req(mapa_base, datos_mapa)
 
   # Crear paletas colorblind-friendly
   pal <- colorNumeric(
@@ -188,9 +205,8 @@ output$mapa1 <- renderLeaflet({
         "<br>",
         "<b>Casos: </b>",
         n,
-        " (",
-        percent(pct, accuracy = .1),
-        " del total país)"
+        "<b> Porcentaje: </b>",
+        percent(pct, accuracy = .1)
       )
     ) |>
 
@@ -460,13 +476,13 @@ output$tab1 <- renderDT({
 
 ## Descargar como CSV
 output$down_csv2 <- downloadHandler(
-  filename = function() paste0("tabla_casos_", Sys.Date(), ".csv"),
+  filename = function() paste0("tabla_casos_", 2024, ".csv"),
   content = function(file) export(tab1_data(), file)
 )
 
 ## Descargar como Excel
 output$down_excel2 <- downloadHandler(
-  filename = function() paste0("tabla_casos_", Sys.Date(), ".xlsx"),
+  filename = function() paste0("tabla_casos_", 2024, ".xlsx"),
   content = function(file) export(tab1_data(), file)
 )
 ```
@@ -546,7 +562,7 @@ g1 <- reactive({
     ) +
     labs(
       x = var_label(datos[[x]]),
-      y = "frecuencia",
+      y = "Frecuencia",
       fill = var_label(datos[[y]]),
       title = paste0(
         "Lesiones por causas externas según ",
@@ -571,9 +587,25 @@ output$plot1 <- renderPlot({
 
 
 ## Guardar gráfico como PNG
-output$download <- downloadHandler(
+output$down_png1 <- downloadHandler(
   filename = function() {
-    paste0("lesiones_", input$x, "_", input$y, "_", Sys.Date(), ".png")
+    paste0("lesiones_", input$estr3, "_", input$estr4, "_", 2024, ".png")
+  },
+  content = function(file) {
+    ggsave(
+      filename = file,
+      plot = g1(),
+      width = 8,
+      height = 6,
+      dpi = 300
+    )
+  }
+)
+
+## Guardar gráfico como PDF
+output$down_pdf1 <- downloadHandler(
+  filename = function() {
+    paste0("lesiones_", input$estr3, "_", input$estr4, "_", 2024, ".pdf")
   },
   content = function(file) {
     ggsave(
@@ -652,10 +684,23 @@ selectInput(
   )
 )
 
-## Botón descarga
+## Descargar datos
+tags$p("Descargar como:")
+
+# PNG
 downloadButton(
-  outputId = "download_png",
-  label = "PNG"
+  outputId = "down_png1",
+  label = NULL,
+  icon = icon("file-image"),
+  class = "btn-download"
+)
+
+# PDF
+downloadButton(
+  outputId = "down_pdf1",
+  label = NULL,
+  icon = icon("file-pdf"),
+  class = "btn-download"
 )
 ```
 
@@ -665,3 +710,123 @@ plotOutput("plot1")
 ```
 
 # Transporte
+
+```{r}
+#| id: Gráficos lesiones x transporte
+#| context: server
+# Crear dataset transporte
+datos_tr <- datos |>
+  # Filtrar datos
+  filter(mecanismo == "Transporte") |>
+
+  # Seleccionar columnas relevantes
+  select(
+    mes_anio_lesion,
+    prov_lesion,
+    sexo,
+    grupo_edad,
+    sit_laboral,
+    lugar_lesion,
+    evento_multiple,
+    cond_lesionado:asiento_ninos,
+    evid_alcohol:egreso
+  )
+```
+
+## Serie temporal
+
+```{r}
+#| id: Gráfico 2
+#| context: server
+# Crear gráfico
+output$g2 <- renderPlot({
+  req(datos_tr, input$estr5)
+
+  estr <- input$estr5
+
+  # Datos para el gráfico
+  datos_plot <- datos_tr |>
+    count(across(c(mes_anio_lesion, any_of(estr))))
+
+  # Serie temporal
+  g2 <- datos_plot |>
+    ggplot(aes(
+      x = mes_anio_lesion,
+      y = n,
+      group = .data[[estr]],
+      color = .data[[estr]]
+    )) +
+
+    # Geomas
+    geom_point() +
+    geom_line() +
+
+    # Formato eje X
+    # scale_x_date(labels = label_date_short(), date_breaks = "2 months") +
+
+    # Títulos
+    labs(
+      x = NULL,
+      color = var_label(datos_tr[[estr]]),
+      title = paste0(
+        "Frecuencia mensual de lesiones por ",
+        str_to_lower(var_label(datos_tr[[estr]])),
+        ", SIVILE (2024)"
+      )
+    ) +
+
+    # Tema
+    tema_sivile()
+
+  # Mostrar gráfico
+  g2
+})
+```
+
+```{r}
+#| id: Toolbar g2
+#| content: card-toolbar
+# Selector variable Y
+selectInput(
+  inputId = "estr5",
+  label = "Estratificar por",
+  choices = c(
+    "Provincia lesión" = "prov_lesion",
+    "Condición lesionado" = "cond_lesionado",
+    "Modo transporte" = "modo_transporte",
+    "Evento múltiple" = "evento_multiple",
+    "Evidencia alcohol" = "evid_alcohol"
+  )
+)
+
+## Selector de colores
+selectInput(
+  inputId = "pal1",
+  label = "Paleta de colores",
+  choices = c(
+    "Managua" = "scico.managua",
+    "Icefire" = "icefire",
+    "Tokyo" = "-scico.tokyo",
+    "Viridis" = "-viridis"
+  ),
+  selected = "-viridis"
+)
+
+## Posición leyenda
+selectInput(
+  inputId = "legend",
+  label = "Leyenda",
+  choices = c(
+    "Abajo" = "bottom",
+    "Arriba" = "top",
+    "Ocultar" = "none"
+  )
+)
+```
+
+```{r}
+#| id: Mostrar g2
+plotOutput("g2")
+```
+
+## Col2

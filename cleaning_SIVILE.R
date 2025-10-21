@@ -1,7 +1,7 @@
 ### Limpieza dataset SIVILE 2024
 ### Autor: Tamara Ricardo
 ### Fecha modificación:
-# 2025-10-17 13:18:15
+# 2025-10-21 09:27:27
 
 # Cargar paquetes --------------------------------------------------------
 pacman::p_load(
@@ -224,7 +224,7 @@ datos_clean <- datos_raw |>
 
   # Crear variables para mes y semana epidemiológica de lesión
   mutate(
-    mes_anio_lesion = format(fecha_lesion, "%Y-%m"),
+    mes_anio_lesion = format(fecha_lesion, format = "%b-%Y"),
     semana_epi_lesion = epiweek(fecha_lesion),
     .after = fecha_lesion
   ) |>
@@ -528,7 +528,7 @@ datos_clean <- datos_raw |>
 datos <- datos_clean |>
   # Convertir variables caracter a factor
   mutate(across(
-    .cols = where(is.character),
+    .cols = where(is.character) & !matches("mes_anio_lesion"),
     .fns = ~ factor(.x) |> fct_infreq()
   )) |>
 
