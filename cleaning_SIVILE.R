@@ -1,7 +1,7 @@
 ### Limpieza dataset SIVILE 2024
 ### Autor: Tamara Ricardo
 ### Fecha modificación:
-# 2025-10-21 09:27:27
+# 2025-10-21 12:26:48
 
 # Cargar paquetes --------------------------------------------------------
 pacman::p_load(
@@ -211,9 +211,10 @@ datos_clean <- datos_raw |>
   # Crear ID UCL por provincia
   mutate(
     id_prov_ucl = str_c(
-      prov$codprov_iso[match(prov_ucl, prov$name_iso)],
-      str_pad(dense_rank(ucl_id), width = 3, pad = "0"),
-      sep = "-"
+      #prov$codprov_iso[match(prov_ucl, prov$name_iso)],
+      str_to_lower(prov_ucl) |> str_replace_all(" ", "\\_"),
+      str_pad(dense_rank(ucl_id), width = 2, pad = "0"),
+      sep = "_"
     ),
     .by = prov_ucl,
     .after = prov_ucl

@@ -84,11 +84,10 @@ tab_format <- function(x) {
     datatable(
       rownames = FALSE,
       colnames = c(var_label(x) |> as.character()),
-      filter = "top",
-      # extensions = "Buttons",
+      #filter = "top",
       escape = FALSE,
       options = list(
-        searching = FALSE,
+        searching = TRUE,
         info = FALSE,
         paging = FALSE,
         autoWidth = FALSE,
@@ -103,7 +102,7 @@ tab_format <- function(x) {
 # Tema personalizado para gráficos
 tema_sivile <- function() {
   list(
-    scale_color_discrete_c4a_cat(palette = input$pal1),
+    scale_color_discrete_c4a_cat(palette = input$pal4),
     theme_minimal(),
     theme(
       legend.position = input$legend,
@@ -306,23 +305,39 @@ leafletOutput("mapa1")
 #| context: server
 # Crear mapa
 output$mapa2 <- renderLeaflet({
-  req(input$prov, input$estr1, input$pal1, input$base1)
+  req(input$prov, input$estr1, input$pal2, input$base1)
 
   # Definir variables
   prov <- input$prov
   estrato <- input$estr1
 
   # Crear datos para el mapa
-  datos_mapa <- shp_arg |>
-    inner_join(
-      tabyl(datos, !!sym(prov), !!sym(estrato)) |>
-        adorn_totals(where = "col") |>
-        rename(name_iso = !!sym(prov))
-    )
+  if (prov == "id_prov_ucl") {
+    datos_mapa <- datos |>
+      count(prov_ucl, id_prov_ucl, !!sym(estrato)) |>
+      pivot_wider(
+        names_from = !!sym(estrato),
+        values_from = n
+      ) |>
+      mutate(Total = rowSums(across(where(is.numeric)))) |>
+      rename(name_iso = prov_ucl)
+  } else {
+    datos_mapa <- datos |>
+      count(!!sym(prov), !!sym(estrato)) |>
+      pivot_wider(
+        names_from = !!sym(estrato),
+        values_from = n
+      ) |>
+      mutate(Total = rowSums(across(where(is.numeric)))) |>
+      rename(name_iso = !!sym(prov))
+  }
+
+  # Añadir geometrías
+  datos_mapa <- shp_arg |> inner_join(datos_mapa)
 
   # Crear paleta de colores colorblind-friendly
   pal <- colorNumeric(
-    palette = c4a(palette = input$pal1),
+    palette = c4a(palette = input$pal2),
     domain = c(0, max(datos_mapa$Total, na.rm = TRUE))
   )
 
@@ -333,14 +348,8 @@ output$mapa2 <- renderLeaflet({
   m2 <- datos_mapa |>
     # Capa base Argentina
     mapa_base() |>
-
     # Leyenda
-    addLegend(
-      title = "Frecuencia",
-      pal = pal,
-      values = datos_mapa$Total
-    ) |>
-
+    addLegend(title = "Frecuencia", pal = pal, values = datos_mapa$Total) |>
     # Control de capas
     addLayersControl(
       overlayGroups = cat,
@@ -359,17 +368,16 @@ output$mapa2 <- renderLeaflet({
         stroke = TRUE,
         color = "grey",
         weight = 2,
+        clusterOptions = markerClusterOptions(maxClusterRadius = 10),
         popup = ~ paste0(
-          "<b>Provincia: </b> ",
+          "<b>Provincia: </b>",
           name_iso,
-          "<br>",
-          "<b>Casos: </b>",
-          datos_mapa[[x]]
+          "<br><b>Casos: </b>",
+          get(x)
         ),
         group = x
       )
   }
-
   # Mostrar
   m2
 })
@@ -383,6 +391,7 @@ selectInput(
   inputId = "prov",
   label = "Mostrar datos por",
   choices = c(
+    "UCL" = "id_prov_ucl",
     "Prov. UCL" = "prov_ucl",
     "Prov. lesión" = "prov_lesion"
   )
@@ -401,7 +410,7 @@ selectInput(
 
 ## Selector de colores
 selectInput(
-  inputId = "pal1",
+  inputId = "pal2",
   label = "Paleta de colores",
   choices = c(
     "Managua" = "scico.managua",
@@ -436,7 +445,14 @@ leafletOutput("mapa2")
 tab1_data <- reactive({
   # Dataset para la tabla
   datos_tab <- datos |>
-    select(starts_with("prov_"), sexo, grupo_edad, intencionalidad, egreso)
+    select(
+      contains("prov_"),
+      sexo,
+      grupo_edad,
+      intencionalidad,
+      mecanismo,
+      egreso
+    )
 
   # Variables
   vars <- intersect(input$estr2, names(datos_tab))
@@ -498,7 +514,9 @@ selectInput(
   choices = c(
     "Sexo" = "sexo",
     "Edad" = "grupo_edad",
-    "Intencionalidad" = "intencionalidad"
+    "Intencionalidad" = "intencionalidad",
+    "Mecanismo" = "mecanismo",
+    "Egreso" = "egreso"
   )
 )
 
@@ -533,7 +551,8 @@ DTOutput("tab1")
 #| context: server
 ## Gráfico pirámides reactivo
 g1 <- reactive({
-  req(input$estr3, input$estr4)
+  req(input$sel, input$estr3, input$estr4, input$pal3)
+
   # Definir variables
   x <- input$estr3
   y <- input$estr4
@@ -541,6 +560,7 @@ g1 <- reactive({
   # Crear dataset para el gráfico
   datos_plot <- datos |>
     select(
+      id_prov_ucl,
       sexo,
       grupo_edad,
       nivel_instruccion,
@@ -552,14 +572,25 @@ g1 <- reactive({
       tipo_lesion
     )
 
+  # Filtrar por UCL
+  if (input$sel != "Total país") {
+    datos_plot <- datos_plot |>
+      filter(id_prov_ucl == input$sel) |>
+      droplevels()
+  }
+
+  # Paleta colorblind-friendly
+  pal <- c4a(input$pal3, n = nlevels(datos[[y]]))
+
   # Generar gráfico
   datos_plot |>
     age_pyramid(
       age_group = any_of(x),
       split_by = any_of(y),
       proportional = input$prop,
-      pal = c4a(input$pal1, n = nlevels(datos[[y]]))
+      pal = pal
     ) +
+    # Títulos
     labs(
       x = var_label(datos[[x]]),
       y = "Frecuencia",
@@ -572,11 +603,7 @@ g1 <- reactive({
         ", SIVILE (2024)"
       )
     ) +
-    theme_minimal() +
-    theme(
-      legend.position = input$legend,
-      title = element_text(face = "bold")
-    )
+    tema_sivile()
 })
 
 
@@ -623,6 +650,18 @@ output$down_pdf1 <- downloadHandler(
 ```{r}
 #| id: Toolbar gráfico de pirámides
 #| content: card-toolbar
+## Filtro
+selectInput(
+  inputId = "sel",
+  label = "Filtrar por",
+  choices = c(
+    "Total país",
+    datos |>
+      filter(n() >= 200, .by = id_prov_ucl) |>
+      distinct(id_prov_ucl)
+  )
+)
+
 ## Variable X
 selectInput(
   inputId = "estr3",
@@ -652,7 +691,7 @@ selectInput(
 
 ## Selector de colores
 selectInput(
-  inputId = "pal1",
+  inputId = "pal3",
   label = "Paleta de colores",
   choices = c(
     "Managua" = "scico.managua",
@@ -743,7 +782,7 @@ datos_tr <- datos |>
 #| context: server
 # Crear gráfico
 output$g2 <- renderPlot({
-  req(datos_tr, input$estr5)
+  req(datos_tr, input$estr5, input$pal4)
 
   estr <- input$estr5
 
@@ -804,7 +843,7 @@ selectInput(
 
 ## Selector de colores
 selectInput(
-  inputId = "pal1",
+  inputId = "pal4",
   label = "Paleta de colores",
   choices = c(
     "Managua" = "scico.managua",
