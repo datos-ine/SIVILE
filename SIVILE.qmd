@@ -390,11 +390,8 @@ output$mapa2 <- renderLeaflet({
 selectInput(
   inputId = "prov",
   label = "Mostrar datos por",
-  choices = c(
-    "UCL" = "id_prov_ucl",
-    "Prov. UCL" = "prov_ucl",
-    "Prov. lesión" = "prov_lesion"
-  )
+  choices = names(datos)[str_detect(names(datos), "prov")] |>
+    set_names(var_label(datos)[str_detect(names(datos), "prov")])
 )
 
 ## Selector de estratos
@@ -546,35 +543,40 @@ DTOutput("tab1")
 ```
 
 # Gráficos
+
 ```{r}
-#| id: Gráfico de pirámides
+#| id: Dataset para el gráfico 1
+#| context: setup
+# Crear dataset para el gráfico
+datos_g1 <- datos |>
+  select(
+    id_prov_ucl,
+    grupo_edad,
+    sexo,
+    nivel_instruccion,
+    sit_laboral,
+    lugar_lesion,
+    mecanismo,
+    intencionalidad,
+    egreso,
+    tipo_lesion
+  )
+```
+
+```{r}
+#| id: Gráfico 1
 #| context: server
 ## Gráfico pirámides reactivo
 g1 <- reactive({
-  req(input$sel, input$estr3, input$estr4, input$pal3)
+  req(datos_g1, input$sel1, input$estr3, input$estr4, input$pal3)
 
   # Definir variables
   x <- input$estr3
   y <- input$estr4
 
-  # Crear dataset para el gráfico
-  datos_plot <- datos |>
-    select(
-      id_prov_ucl,
-      sexo,
-      grupo_edad,
-      nivel_instruccion,
-      sit_laboral,
-      lugar_lesion,
-      mecanismo,
-      intencionalidad,
-      egreso,
-      tipo_lesion
-    )
-
   # Filtrar por UCL
-  if (input$sel != "Total país") {
-    datos_plot <- datos_plot |>
+  if (input$sel1 != "Total país") {
+    datos_g1 <- datos_g1 |>
       filter(id_prov_ucl == input$sel) |>
       droplevels()
   }
@@ -583,7 +585,7 @@ g1 <- reactive({
   pal <- c4a(input$pal3, n = nlevels(datos[[y]]))
 
   # Generar gráfico
-  datos_plot |>
+  datos_g1 |>
     age_pyramid(
       age_group = any_of(x),
       split_by = any_of(y),
@@ -652,11 +654,11 @@ output$down_pdf1 <- downloadHandler(
 #| content: card-toolbar
 ## Filtro
 selectInput(
-  inputId = "sel",
+  inputId = "sel1",
   label = "Filtrar por",
   choices = c(
     "Total país",
-    datos |>
+    datos_g1 |>
       filter(n() >= 200, .by = id_prov_ucl) |>
       distinct(id_prov_ucl)
   )
@@ -666,27 +668,16 @@ selectInput(
 selectInput(
   inputId = "estr3",
   label = "Categoría",
-  choices = c(
-    "Grupo etario" = "grupo_edad",
-    "Sexo" = "sexo"
-  ),
-  width = "100%"
+  choices = names(datos_g1)[c(2:3)] |>
+    set_names(var_label(datos_g1)[c(2:3)])
 )
 
 # Estrato
 selectInput(
   inputId = "estr4",
   label = "Estrato",
-  choices = c(
-    "Sexo" = "sexo",
-    "Nivel educativo" = "nivel_instruccion",
-    "Situación laboral" = "sit_laboral",
-    "Lugar lesión" = "lugar_lesion",
-    "Mecanismo lesión" = "mecanismo",
-    "Intencionalidad" = "intencionalidad",
-    "Tipo lesión" = "tipo_lesion",
-    "Egreso" = "egreso"
-  )
+  choices = names(datos_g1)[-c(1:2)] |>
+    set_names(var_label(datos_g1)[-c(1:2)])
 )
 
 ## Selector de colores
@@ -752,7 +743,7 @@ plotOutput("plot1")
 
 ```{r}
 #| id: Gráficos lesiones x transporte
-#| context: server
+#| context: setup
 # Crear dataset transporte
 datos_tr <- datos |>
   # Filtrar datos
@@ -763,11 +754,11 @@ datos_tr <- datos |>
 
   # Seleccionar columnas relevantes
   select(
+    id_prov_ucl,
     mes_anio_lesion,
     prov_lesion,
     sexo,
     grupo_edad,
-    sit_laboral,
     lugar_lesion,
     evento_multiple,
     cond_lesionado:asiento_ninos,
@@ -782,13 +773,22 @@ datos_tr <- datos |>
 #| context: server
 # Crear gráfico
 output$g2 <- renderPlot({
-  req(datos_tr, input$estr5, input$pal4)
+  req(datos_tr, input$sel2, input$estr5, input$pal4)
 
   estr <- input$estr5
 
   # Datos para el gráfico
-  datos_plot <- datos_tr |>
-    count(across(c(mes_anio_lesion, any_of(estr))))
+  if (input$sel2 != "Total país") {
+    datos_plot <- datos_tr |>
+      filter(id_prov_ucl == input$sel2) |>
+      count(across(c(mes_anio_lesion, any_of(estr)))) |>
+      drop_na()
+  } else {
+    datos_plot <- datos_tr |>
+      droplevels() |>
+      count(across(c(mes_anio_lesion, any_of(estr)))) |>
+      drop_na()
+  }
 
   # Serie temporal
   g2 <- datos_plot |>
@@ -826,19 +826,26 @@ output$g2 <- renderPlot({
 ```
 
 ```{r}
-#| id: Toolbar g2
+#| id: Toolbar Gráfico 2
 #| content: card-toolbar
-# Selector variable Y
+## Filtro
+selectInput(
+  inputId = "sel2",
+  label = "Filtrar por",
+  choices = c(
+    "Total país",
+    datos |>
+      filter(n() >= 200, .by = id_prov_ucl) |>
+      distinct(id_prov_ucl)
+  )
+)
+
+# Seleccionar variable Y
 selectInput(
   inputId = "estr5",
   label = "Estratificar por",
-  choices = c(
-    "Provincia lesión" = "prov_lesion",
-    "Condición lesionado" = "cond_lesionado",
-    "Modo transporte" = "modo_transporte",
-    "Evento múltiple" = "evento_multiple",
-    "Evidencia alcohol" = "evid_alcohol"
-  )
+  choices = names(datos_tr)[-c(1:2)] |>
+    set_names(var_label(datos_tr)[-c(1:2)])
 )
 
 ## Selector de colores
@@ -867,7 +874,7 @@ selectInput(
 ```
 
 ```{r}
-#| id: Mostrar g2
+#| id: Mostrar Gráfico 2
 plotOutput("g2")
 ```
 
