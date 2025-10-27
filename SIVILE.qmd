@@ -21,6 +21,7 @@ pacman::p_load(
   sf,
   leaflet,
   geoAr,
+  rnaturalearth,
   mapview,
   # Gráficos
   cols4all,
@@ -62,14 +63,14 @@ argenmap_hyb <- "https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/mapabase
 "
 
 ## Cargar shapefile provincias ----
-shp_arg <- get_geo("ARGENTINA", level = "provincia") |>
-  # Añadir códigos provincias
+get_shp_arg <- possibly(
+  ~ get_geo("ARGENTINA", level = "provincia"),
+  otherwise = ne_states(country = "Argentina")
+)
+
+shp_arg <- get_shp_arg() |>
   add_geo_codes() |>
-
-  # Cambiar nombre CABA
   mutate(name_iso = if_else(codprov == "01", "CABA", name_iso)) |>
-
-  # Convertir a puntos
   st_point_on_surface()
 ```
 
@@ -577,7 +578,7 @@ g1 <- reactive({
   # Filtrar por UCL
   if (input$sel1 != "Total país") {
     datos_g1 <- datos_g1 |>
-      filter(id_prov_ucl == input$sel) |>
+      filter(id_prov_ucl == input$sel1) |>
       droplevels()
   }
 
